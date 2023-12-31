@@ -1,0 +1,246 @@
+# To create the EKS cluster without nodegroup
+eksctl create cluster --name=eks-cicd-dev-cluster \
+                      --region=us-east-1 \
+                      --zones=us-east-1a,us-east-1b \
+                      --without-nodegroup
+
+# Create & associate OIDC identity provider, this enables the flexibility to add IAM roles to EKS cluster
+eksctl utils associate-iam-oidc-provider \
+    --region us-east-1 \
+    --cluster eks-cicd-dev-cluster \
+    --approve
+
+# To create the nodegroup in the above created cluster
+eksctl create nodegroup --cluster=eks-cicd-dev-cluster \
+                        --region=us-east-1 \
+                        --name=ng-workers \
+                        --node-type=t2.medium \
+                        --nodes-min=2 \
+                        --nodes-max=3 \
+                        --node-volume-size=10 \
+                        --ssh-access \
+                        --ssh-public-key=kube-demo \
+                        --managed \
+                        --asg-access \
+                        --external-dns-access \
+                        --full-ecr-access \
+                        --appmesh-access \
+                        --alb-ingress-access \
+                        --node-private-networking
+
+###### Display the EKS cluster to our user ######
+
+# Verify what is present in aws-auth configmap before change
+kubectl get configmap aws-auth -o yaml -n kube-system
+
+# Edit the auth config map
+kubectl -n kube-system edit configmap aws-auth
+
+
+# Sample file to update the auth config map
+https://github.com/cvamsikrishna11/eks-cicd-demo/blob/master/IAM%20%26%20Others/sample_add_user_permission_to_auth.yml
+
+# Close the file once the autconfig map is modified
+press --> Esc 
+press --> :
+press --> wq!
+press --> Enter
+
+#change path to the ec2-user
+cd /home/ec2-user
+
+# Download the codebase from the s3 
+aws s3 cp s3://jjtech-config-files/eks-cicd-demo.zip .
+
+# Unzip the downloaded code zip
+unzip eks-cicd-demo.zip 
+
+# Change the path to repo folder
+cd eks-cicd-demo
+
+# List existing repo content
+ls
+
+# Create or update the kubeconfig file for cluster if management server lost track of cluster
+aws eks --region us-east-1 update-kubeconfig --name eks-cicd-dev-cluster
+
+# Apply kubectl manifests
+kubectl apply -f kube-manifests/
+
+# Get pods
+kubectl get pods
+
+# Get service
+kubectl get service
+
+# Delete kube-manifests
+kubectl delete -f kube-manifests/
+
+# Delete nodegroup
+eksctl delete nodegroup --cluster=eks-cicd-dev-cluster --name=ng-workers --region=us-east-1 
+
+# Delete the EKS cluster
+eksctl delete cluster eks-cicd-dev-cluster --region=us-east-1
+
+
+# Change the path to project eks-cicd-demo
+cd /home/ec2-user/eks-cicd-demo/
+
+# change the path to kube-manifests (should execute above command first)
+cd kube-manifests
+
+# edit app-deployment file for making the container_image as env variable
+nano app-deployment.yml
+
+# read app-deployment.yml file
+cat app-deployment.yml
+
+# To move back 
+cd ..
+
+# To initialize the git repo
+git init
+
+# To check the git status
+git status
+
+# To add all the changed files to git 
+git add .
+
+# Commit change to local git
+git commit -m "modified the container image variable"
+
+# Add a git remote repo
+git remote add origin https://git-codecommit.us-east-1.amazonaws.com/v1/repos/eks-cicd-demo
+
+# Check git remote 
+git remote -v
+
+# Push changes to remote branch
+git push --set-upstream origin master
+
+
+# Verify existing aws-auth configmap for the cluster
+kubectl get configmap aws-auth -o yaml -n kube-system
+
+# To get pods
+kubectl get pods
+
+# To get service
+kubectl get service
+
+# commands to add, commit, push into git
+git add .
+
+git commit -m "deploying a new version of the app"
+
+git push
+
+# Be in the folder /home/ec2-user/eks-cicd-demo
+cd /home/ec2-user/eks-cicd-demo
+
+# Delete kube-manifests
+kubectl delete -f kube-manifests/
+
+# Delete nodegroup
+eksctl delete nodegroup --cluster=eks-cicd-dev-cluster --name=ng-workers --region=us-east-1 
+
+# Delete the EKS cluster
+eksctl delete cluster eks-cicd-dev-cluster --region=us-east-1
+
+
+*********************************** Commands EKS CICD demo prod depployment setup *********************************** 
+
+# login as root
+sudo su -
+
+# access ec2-user folder
+cd /home/ec2-user
+
+# To create the EKS cluster without nodegroup for prod
+eksctl create cluster --name=eks-cicd-prod-cluster \
+                      --region=us-east-1 \
+                      --zones=us-east-1a,us-east-1b \
+                      --without-nodegroup
+
+
+# Create & associate OIDC identity provider, this enables the flexibility to add IAM roles to EKS cluster
+eksctl utils associate-iam-oidc-provider \
+    --region us-east-1 \
+    --cluster eks-cicd-prod-cluster \
+    --approve
+
+
+# To create the nodegroup in the above created cluster
+eksctl create nodegroup --cluster=eks-cicd-prod-cluster \
+                        --region=us-east-1 \
+                        --name=ng-workers \
+                        --node-type=t2.medium \
+                        --nodes-min=2 \
+                        --nodes-max=3 \
+                        --node-volume-size=10 \
+                        --ssh-access \
+                        --ssh-public-key=kube-demo \
+                        --managed \
+                        --asg-access \
+                        --external-dns-access \
+                        --full-ecr-access \
+                        --appmesh-access \
+                        --alb-ingress-access \
+                        --node-private-networking
+
+# Create or update the kubeconfig file for cluster if management server lost track of cluster
+aws eks --region us-east-1 update-kubeconfig --name eks-cicd-prod-cluster
+
+# Login to ec2 as sudo
+sudo su -
+
+# Change to the eks-cicd-demo folder
+cd eks-cicd-demo
+
+# change to app folder
+cd app/
+
+# edit index.html
+nano index.html
+ctrl/cmd + x 
+press y
+press Enter
+
+
+# Push last version to git
+git add .
+git commit -m "app version 10"
+git push
+
+
+################## To delete the infra ##################
+
+# Be in the folder /home/ec2-user/eks-cicd-demo
+cd /home/ec2-user/eks-cicd-demo
+
+1. Prod cluster deletion
+# setup prod cluster in kubeconfig
+aws eks --region us-east-1 update-kubeconfig --name eks-cicd-prod-cluster
+
+# Delete kube-manifests
+kubectl delete -f kube-manifests/
+
+# Delete nodegroup
+eksctl delete nodegroup --cluster=eks-cicd-prod-cluster --name=ng-workers --region=us-east-1 
+
+# Delete the EKS cluster
+eksctl delete cluster eks-cicd-prod-cluster --region=us-east-1
+
+2. Dev cluster deletion
+# setup prod cluster in kubeconfig
+aws eks --region us-east-1 update-kubeconfig --name eks-cicd-dev-cluster
+
+# Delete kube-manifests
+kubectl delete -f kube-manifests/
+
+# Delete nodegroup
+eksctl delete nodegroup --cluster=eks-cicd-dev-cluster --name=ng-workers --region=us-east-1 
+
+# Delete the EKS cluster
+eksctl delete cluster eks-cicd-dev-cluster --region=us-east-1
